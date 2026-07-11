@@ -1,0 +1,24 @@
+[package]
+name = "brewkeep"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+tray-icon = "0.14"
+tao = "0.28"
+ico = "0.5"
+windows = { version = "0.56", features = [
+    "Win32_Foundation",
+    "Win32_System_Power",
+    "Win32_System_Registry",
+    "Win32_System_Memory",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[build-dependencies]
+embed-resource = "2.4"
+
+[profile.release]
+lto = true
+opt-level = "z"
+strip = true
