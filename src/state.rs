@@ -62,11 +62,25 @@ impl State {
         paused_item: MenuItem,
         autostart_item: CheckMenuItem,
     ) -> Self {
+        // Restore from state file if it exists (handles crash/shutdown without clean exit)
+        let restored = power::restore_from_state_file();
+
         let power_snapshot = power::snapshot_current().ok();
-        power::hold_awake();
+
+        // Start in Paused mode to prevent boot loop from Force Sleep persisting
+        let initial_mode = if restored {
+            Mode::Paused
+        } else {
+            Mode::Hold
+        };
+
+        match initial_mode {
+            Mode::Hold => power::hold_awake(),
+            _ => {}
+        }
 
         Self {
-            current_mode: Mode::Hold,
+            current_mode: initial_mode,
             power_snapshot,
             hold_item,
             sleep30_item,
@@ -91,12 +105,29 @@ impl State {
         match mode {
             Mode::Hold => power::hold_awake(),
             Mode::ForceSleep30 => {
+                // Save original values before modifying
+                if let Some(ref snap) = self.power_snapshot {
+                    power::save_state_file(snap.ac_monitor_timeout, snap.dc_monitor_timeout);
+                }
                 let _ = power::set_monitor_timeout(30);
             }
             Mode::ForceSleep60 => {
+                // Save original values before modifying
+                if let Some(ref snap) = self.power_snapshot {
+                    power::save_state_file(snap.ac_monitor_timeout, snap.dc_monitor_timeout);
+                }
                 let _ = power::set_monitor_timeout(60);
             }
-            Mode::Paused => {}
+            Mode::Paused => {
+                // Restore original values when pausing
+                if let Some(ref snap) = self.power_snapshot {
+                    let _ = power::set_monitor_timeout_values(
+                        snap.ac_monitor_timeout,
+                        snap.dc_monitor_timeout,
+                    );
+                    let _ = std::fs::remove_file(power::state_file_path());
+                }
+            }
         }
 
         self.hold_item.set_enabled(mode != Mode::Hold);
