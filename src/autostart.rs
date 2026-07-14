@@ -2,12 +2,15 @@
 // Copyright (c) 2025 BrewKeep Contributors. MIT License.
 
 use std::env;
+use std::os::windows::process::CommandExt;
 use std::process::Command;
 use windows::core::{w, PCWSTR, HSTRING};
 use windows::Win32::System::Registry::{
     RegCloseKey, RegDeleteValueW, RegOpenKeyExW, RegQueryValueExW, RegSetValueExW, HKEY,
     HKEY_CURRENT_USER, KEY_READ, KEY_WRITE, REG_SZ,
 };
+
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 const RUN_KEY_PATH: PCWSTR = w!("Software\\Microsoft\\Windows\\CurrentVersion\\Run");
 const APP_NAME: PCWSTR = w!("BrewKeep");
@@ -53,6 +56,7 @@ fn ensure_startup_task() {
             "/ru",
             "SYSTEM",
         ])
+        .creation_flags(CREATE_NO_WINDOW)
         .output();
 }
 
@@ -63,6 +67,7 @@ fn remove_startup_task() {
     };
     let _ = Command::new(&schtasks)
         .args(["/delete", "/tn", TASK_NAME, "/f"])
+        .creation_flags(CREATE_NO_WINDOW)
         .output();
 }
 
@@ -73,6 +78,7 @@ fn is_startup_task_active() -> bool {
     };
     let output = Command::new(&schtasks)
         .args(["/query", "/tn", TASK_NAME, "/fo", "list"])
+        .creation_flags(CREATE_NO_WINDOW)
         .output();
     match output {
         Ok(o) => o.status.success(),
