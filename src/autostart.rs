@@ -2,6 +2,7 @@
 // Copyright (c) 2025 BrewKeep Contributors. MIT License.
 
 use std::env;
+use std::process::Command;
 use windows::core::{w, PCWSTR, HSTRING};
 use windows::Win32::System::Registry::{
     RegCloseKey, RegDeleteValueW, RegOpenKeyExW, RegQueryValueExW, RegSetValueExW, HKEY,
@@ -10,8 +11,80 @@ use windows::Win32::System::Registry::{
 
 const RUN_KEY_PATH: PCWSTR = w!("Software\\Microsoft\\Windows\\CurrentVersion\\Run");
 const APP_NAME: PCWSTR = w!("BrewKeep");
+const TASK_NAME: &str = "BrewKeep";
+
+fn find_schtasks() -> Option<String> {
+    let paths = [
+        "C:\\Windows\\System32\\schtasks.exe",
+        "C:\\Windows\\SysWOW64\\schtasks.exe",
+    ];
+    for p in &paths {
+        if std::path::Path::new(p).exists() {
+            return Some(p.to_string());
+        }
+    }
+    Some("schtasks.exe".to_string())
+}
+
+fn ensure_startup_task() {
+    let exe_path = match env::current_exe() {
+        Ok(p) => p,
+        Err(_) => return,
+    };
+    let restore_cmd = format!("\"{}\" --restore", exe_path.display());
+
+    let schtasks = match find_schtasks() {
+        Some(p) => p,
+        None => return,
+    };
+
+    let _ = Command::new(&schtasks)
+        .args([
+            "/create",
+            "/tn",
+            TASK_NAME,
+            "/tr",
+            &restore_cmd,
+            "/sc",
+            "onstart",
+            "/rl",
+            "highest",
+            "/f",
+            "/ru",
+            "SYSTEM",
+        ])
+        .output();
+}
+
+fn remove_startup_task() {
+    let schtasks = match find_schtasks() {
+        Some(p) => p,
+        None => return,
+    };
+    let _ = Command::new(&schtasks)
+        .args(["/delete", "/tn", TASK_NAME, "/f"])
+        .output();
+}
+
+fn is_startup_task_active() -> bool {
+    let schtasks = match find_schtasks() {
+        Some(p) => p,
+        None => return false,
+    };
+    let output = Command::new(&schtasks)
+        .args(["/query", "/tn", TASK_NAME, "/fo", "list"])
+        .output();
+    match output {
+        Ok(o) => o.status.success(),
+        Err(_) => false,
+    }
+}
 
 pub fn is_autostart_enabled() -> bool {
+    if is_startup_task_active() {
+        return true;
+    }
+
     unsafe {
         let mut h_key = HKEY::default();
         if RegOpenKeyExW(HKEY_CURRENT_USER, RUN_KEY_PATH, 0, KEY_READ, &mut h_key).is_err() {
@@ -27,6 +100,12 @@ pub fn is_autostart_enabled() -> bool {
 }
 
 pub fn set_autostart(enable: bool) -> Result<(), String> {
+    if enable {
+        ensure_startup_task();
+    } else {
+        remove_startup_task();
+    }
+
     unsafe {
         let mut h_key = HKEY::default();
         let open_result = RegOpenKeyExW(HKEY_CURRENT_USER, RUN_KEY_PATH, 0, KEY_WRITE, &mut h_key);
