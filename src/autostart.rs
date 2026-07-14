@@ -144,3 +144,20 @@ pub fn set_autostart(enable: bool) -> Result<(), String> {
         Ok(())
     }
 }
+
+pub fn full_cleanup() {
+    remove_startup_task();
+
+    unsafe {
+        let mut h_key = HKEY::default();
+        if RegOpenKeyExW(HKEY_CURRENT_USER, RUN_KEY_PATH, 0, KEY_WRITE, &mut h_key).is_ok() {
+            let _ = RegDeleteValueW(h_key, APP_NAME);
+            let _ = RegCloseKey(h_key);
+        }
+    }
+
+    let _ = std::fs::remove_file(crate::power::state_file_path());
+
+    let appdata = std::env::var("APPDATA").unwrap_or_default();
+    let _ = std::fs::remove_dir_all(std::path::PathBuf::from(appdata).join("BrewKeep"));
+}

@@ -60,6 +60,9 @@ pub fn run_event_loop(mut state: State) {
     menu.append(&PredefinedMenuItem::separator()).unwrap();
     menu.append(&state.autostart_item).unwrap();
     menu.append(&PredefinedMenuItem::separator()).unwrap();
+    let uninstall_item = MenuItem::new("Uninstall BrewKeep", true, None);
+    menu.append(&uninstall_item).unwrap();
+    menu.append(&PredefinedMenuItem::separator()).unwrap();
     let exit_item = MenuItem::new("Exit", true, None);
     menu.append(&exit_item).unwrap();
 
@@ -79,6 +82,7 @@ pub fn run_event_loop(mut state: State) {
     let sleep60_id = state.sleep60_item.id().clone();
     let paused_id = state.paused_item.id().clone();
     let autostart_id = state.autostart_item.id().clone();
+    let uninstall_id = uninstall_item.id().clone();
     let exit_id = exit_item.id().clone();
 
     event_loop.run(move |event, _, control_flow| {
@@ -112,6 +116,13 @@ pub fn run_event_loop(mut state: State) {
                     let current = crate::autostart::is_autostart_enabled();
                     let _ = crate::autostart::set_autostart(!current);
                     state.update_autostart_state();
+                } else if menu_event.id == uninstall_id {
+                    if let Some(ref snap) = state.power_snapshot {
+                        let _ = crate::power::restore(snap);
+                    }
+                    crate::autostart::full_cleanup();
+                    tray_icon.take();
+                    *control_flow = ControlFlow::Exit;
                 } else if menu_event.id == exit_id {
                     tray_icon.take();
                     *control_flow = ControlFlow::Exit;
