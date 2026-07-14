@@ -160,6 +160,12 @@ pub fn hold_awake() {
     }
 }
 
+pub fn prevent_system_sleep() {
+    unsafe {
+        SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED);
+    }
+}
+
 pub fn release_awake() {
     unsafe {
         SetThreadExecutionState(ES_CONTINUOUS);

@@ -62,25 +62,20 @@ impl State {
         paused_item: MenuItem,
         autostart_item: CheckMenuItem,
     ) -> Self {
-        // Restore from state file if it exists (handles crash/shutdown without clean exit)
-        let restored = power::restore_from_state_file();
+        // ALWAYS restore from state file first — this fixes the boot loop.
+        // If the previous session ended in ForceSleep mode, the original
+        // power plan values are in state.dat. Restore them BEFORE doing
+        // anything else so Windows never sees a 30s timeout during boot.
+        power::restore_from_state_file();
 
         let power_snapshot = power::snapshot_current().ok();
 
-        // Start in Paused mode to prevent boot loop from Force Sleep persisting
-        let initial_mode = if restored {
-            Mode::Paused
-        } else {
-            Mode::Hold
-        };
-
-        match initial_mode {
-            Mode::Hold => power::hold_awake(),
-            _ => {}
-        }
+        // Always start in Hold mode: keeps screen on and system awake.
+        // This wakes the screen if it was off from a previous ForceSleep.
+        power::hold_awake();
 
         Self {
-            current_mode: initial_mode,
+            current_mode: Mode::Hold,
             power_snapshot,
             hold_item,
             sleep30_item,
@@ -105,21 +100,20 @@ impl State {
         match mode {
             Mode::Hold => power::hold_awake(),
             Mode::ForceSleep30 => {
-                // Save original values before modifying
                 if let Some(ref snap) = self.power_snapshot {
                     power::save_state_file(snap.ac_monitor_timeout, snap.dc_monitor_timeout);
                 }
+                power::prevent_system_sleep();
                 let _ = power::set_monitor_timeout(30);
             }
             Mode::ForceSleep60 => {
-                // Save original values before modifying
                 if let Some(ref snap) = self.power_snapshot {
                     power::save_state_file(snap.ac_monitor_timeout, snap.dc_monitor_timeout);
                 }
+                power::prevent_system_sleep();
                 let _ = power::set_monitor_timeout(60);
             }
             Mode::Paused => {
-                // Restore original values when pausing
                 if let Some(ref snap) = self.power_snapshot {
                     let _ = power::set_monitor_timeout_values(
                         snap.ac_monitor_timeout,
